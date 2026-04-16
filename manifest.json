@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Markdown Reader",
   "version": "0.1.0",
-  "description": "Enhance Markdown rendering on Git platforms to GitHub quality",
+  "description": "增强 Git 平台上的 Markdown 渲染效果，达到 GitHub 品质",
   "permissions": ["storage", "activeTab"],
   "icons": {
     "16": "icons/icon16.png",
