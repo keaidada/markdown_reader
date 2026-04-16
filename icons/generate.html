@@ -1,0 +1,14 @@
+<!-- Open this in browser and screenshot for icons -->
+<canvas id="c" width="128" height="128"></canvas>
+<script>
+const c = document.getElementById('c').getContext('2d');
+c.fillStyle = '#0969da';
+c.beginPath();
+c.roundRect(0, 0, 128, 128, 20);
+c.fill();
+c.fillStyle = '#fff';
+c.font = 'bold 80px -apple-system, sans-serif';
+c.textAlign = 'center';
+c.textBaseline = 'middle';
+c.fillText('M↓', 64, 64);
+</script>
