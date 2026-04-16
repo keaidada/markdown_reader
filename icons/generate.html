@@ -1,14 +1,123 @@
-<!-- Open this in browser and screenshot for icons -->
-<canvas id="c" width="128" height="128"></canvas>
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { background: #f0f0f0; padding: 20px; font-family: sans-serif; }
+  canvas { margin: 10px; border: 1px solid #ccc; background: #fff; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .label { width: 60px; font-size: 14px; color: #666; }
+  a { display: inline-block; margin: 5px; padding: 8px 16px; background: #0969da; color: #fff; border-radius: 6px; text-decoration: none; cursor: pointer; }
+</style>
+</head>
+<body>
+<h3>Markdown Reader Icon Generator</h3>
+
+<div class="row"><span class="label">128px</span><canvas id="c128" width="128" height="128"></canvas></div>
+<div class="row"><span class="label">48px</span><canvas id="c48" width="48" height="48"></canvas></div>
+<div class="row"><span class="label">16px</span><canvas id="c16" width="16" height="16"></canvas></div>
+
+<div style="margin-top:20px;">
+  <a id="dl128">Download 128px</a>
+  <a id="dl48">Download 48px</a>
+  <a id="dl16">Download 16px</a>
+</div>
+
 <script>
-const c = document.getElementById('c').getContext('2d');
-c.fillStyle = '#0969da';
-c.beginPath();
-c.roundRect(0, 0, 128, 128, 20);
-c.fill();
-c.fillStyle = '#fff';
-c.font = 'bold 80px -apple-system, sans-serif';
-c.textAlign = 'center';
-c.textBaseline = 'middle';
-c.fillText('M↓', 64, 64);
+function drawIcon(canvas, size) {
+  const ctx = canvas.getContext('2d');
+  const s = size / 128; // scale factor
+
+  // White rounded rectangle background
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, 16 * s);
+  ctx.fill();
+
+  // Subtle border
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = Math.max(1, 1.5 * s);
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, 16 * s);
+  ctx.stroke();
+
+  // Draw the "M" with markdown down-arrow style
+  // Main color: dark charcoal
+  const mainColor = '#24292f';
+
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+
+  // Draw M letter - bold geometric style
+  const mWidth = 68 * s;
+  const mHeight = 62 * s;
+  const strokeW = 14 * s;
+  const topY = -mHeight / 2 - 2 * s;
+  const botY = mHeight / 2 - 8 * s;
+
+  ctx.fillStyle = mainColor;
+  ctx.strokeStyle = mainColor;
+  ctx.lineWidth = strokeW;
+  ctx.lineCap = 'square';
+  ctx.lineJoin = 'miter';
+
+  // M shape as a path
+  const left = -mWidth / 2;
+  const right = mWidth / 2;
+  const midX = 0;
+
+  ctx.beginPath();
+  // Left vertical stroke
+  ctx.moveTo(left, botY);
+  ctx.lineTo(left, topY);
+  // Top-left to center diagonal
+  ctx.lineTo(midX, topY + mHeight * 0.45);
+  // Center to top-right diagonal
+  ctx.lineTo(right, topY);
+  // Right vertical stroke
+  ctx.lineTo(right, botY);
+  ctx.stroke();
+
+  // Draw the down arrow at bottom center
+  const arrowTop = botY - 2 * s;
+  const arrowBot = botY + 20 * s;
+  const arrowHalfW = 16 * s;
+
+  ctx.lineWidth = strokeW * 0.85;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  // Vertical line of arrow
+  ctx.moveTo(midX, arrowTop);
+  ctx.lineTo(midX, arrowBot);
+  ctx.stroke();
+
+  // Arrow head
+  ctx.beginPath();
+  ctx.moveTo(midX - arrowHalfW, arrowBot - arrowHalfW * 0.8);
+  ctx.lineTo(midX, arrowBot);
+  ctx.lineTo(midX + arrowHalfW, arrowBot - arrowHalfW * 0.8);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+drawIcon(document.getElementById('c128'), 128);
+drawIcon(document.getElementById('c48'), 48);
+drawIcon(document.getElementById('c16'), 16);
+
+// Download helpers
+function setupDownload(btnId, canvasId, filename) {
+  document.getElementById(btnId).addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = document.getElementById(canvasId).toDataURL('image/png');
+    link.click();
+  });
+}
+setupDownload('dl128', 'c128', 'icon128.png');
+setupDownload('dl48', 'c48', 'icon48.png');
+setupDownload('dl16', 'c16', 'icon16.png');
 </script>
+</body>
+</html>
