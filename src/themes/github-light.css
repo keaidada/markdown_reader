@@ -468,4 +468,91 @@
   font-weight: 600;
   color: #1f2328;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  flex: 1;
+}
+
+/* Export button */
+.md-reader-export-wrapper {
+  position: relative;
+  margin-left: auto;
+}
+
+.md-reader-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #24292f;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.md-reader-export-btn:hover {
+  background: #f3f4f6;
+  border-color: #bbc0c7;
+}
+
+.md-reader-export-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(140,149,159,0.2);
+  min-width: 140px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.md-reader-export-menu-open {
+  display: block;
+}
+
+.md-reader-export-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #24292f;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  text-align: left;
+}
+
+.md-reader-export-option:hover {
+  background: #f6f8fa;
+}
+
+.md-reader-export-option-icon {
+  font-size: 14px;
+}
+
+/* Print styles for PDF export */
+@media print {
+  .md-reader-local-header,
+  .md-reader-toc-sidebar,
+  .md-reader-export-wrapper,
+  .md-reader-copy-btn,
+  .md-reader-code-header {
+    display: none !important;
+  }
+  .md-reader-local-wrapper {
+    margin-left: 0 !important;
+  }
+  .md-reader-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
 }

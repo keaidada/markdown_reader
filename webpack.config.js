@@ -1,6 +1,7 @@
 const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -12,7 +13,6 @@ module.exports = {
     path: path.resolve(__dirname, 'dist'),
     filename: '[name].js',
     clean: true,
-    publicPath: '',  // Chrome extension content scripts don't support auto publicPath
   },
   module: {
     rules: [
@@ -48,5 +48,14 @@ module.exports = {
   },
   optimization: {
     splitChunks: false,
+    minimizer: [
+      new TerserPlugin({
+        terserOptions: {
+          output: {
+            ascii_only: true,  // Escape non-ASCII to \uXXXX — required for Chrome extension UTF-8 validation
+          },
+        },
+      }),
+    ],
   },
 };

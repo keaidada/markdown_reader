@@ -1,4 +1,5 @@
 import { BaseAdapter } from './base';
+import { createExportButton } from '../core/export';
 
 /**
  * Local file adapter — handles file:// URLs ending in .md or .markdown
@@ -106,7 +107,13 @@ export class LocalFileAdapter extends BaseAdapter {
 
     doc.body.appendChild(wrapper);
 
-    return { container: wrapper.querySelector('.md-reader-container'), toc };
+    // Add export button to header
+    const header = wrapper.querySelector('.md-reader-local-header');
+    const contentContainer = wrapper.querySelector('.md-reader-container');
+    const exportBtn = createExportButton(contentContainer, filename.replace(/\.[^.]+$/, ''));
+    header.appendChild(exportBtn);
+
+    return { container: contentContainer, toc };
   }
 
   postProcess(container) {

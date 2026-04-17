@@ -1,20 +1,8 @@
 import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
+import katex from 'katex';
 import { generateToc } from './toc';
-
-let katexLoaded = false;
-let katexModule = null;
-
-/**
- * Lazily load KaTeX only when math expressions are detected
- */
-async function ensureKatex() {
-  if (katexLoaded) return katexModule;
-  katexModule = await import('katex');
-  katexLoaded = true;
-  return katexModule;
-}
 
 /**
  * Check if markdown contains math expressions
@@ -71,30 +59,44 @@ function escapeHtml(text) {
 }
 
 /**
- * Process math expressions in HTML string using KaTeX
+ * Process math expressions in HTML string using KaTeX,
+ * skipping content inside <pre> and <code> tags.
  */
-async function processMath(html) {
-  const katex = await ensureKatex();
+function processMath(html) {
+  // Split HTML into segments: code/pre blocks vs. normal text
+  // We only process math in normal text segments
+  const parts = html.split(/(<pre[\s>][\s\S]*?<\/pre>|<code[\s>][\s\S]*?<\/code>)/gi);
 
-  // Block math: $$...$$
-  html = html.replace(/\$\$([\s\S]+?)\$\$/g, (match, tex) => {
-    try {
-      return katex.default.renderToString(tex.trim(), { displayMode: true, throwOnError: false });
-    } catch {
-      return match;
-    }
-  });
+  for (let i = 0; i < parts.length; i++) {
+    // Odd indices are code/pre blocks — skip them
+    if (i % 2 === 1) continue;
 
-  // Inline math: $...$
-  html = html.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (match, tex) => {
-    try {
-      return katex.default.renderToString(tex.trim(), { displayMode: false, throwOnError: false });
-    } catch {
-      return match;
-    }
-  });
+    let segment = parts[i];
 
-  return html;
+    // Block math: $$...$$
+    segment = segment.replace(/\$\$([\s\S]+?)\$\$/g, (match, tex) => {
+      try {
+        return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false });
+      } catch {
+        return match;
+      }
+    });
+
+    // Inline math: $...$  (require non-space after opening and before closing $)
+    segment = segment.replace(/(?<!\$)\$(?!\$)(?!\s)(.+?)(?<!\s)(?<!\$)\$(?!\$)/g, (match, tex) => {
+      // Skip if it looks like a shell variable or currency
+      if (/^[A-Z_][A-Z_0-9]*$/i.test(tex) || /^\d/.test(tex)) return match;
+      try {
+        return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false });
+      } catch {
+        return match;
+      }
+    });
+
+    parts[i] = segment;
+  }
+
+  return parts.join('');
 }
 
 /**
@@ -103,8 +105,8 @@ async function processMath(html) {
  * Also escapes bare <word> patterns that aren't real HTML tags.
  */
 function preprocessMarkdown(markdown) {
-  // Escape < > inside inline code (`...`)
-  markdown = markdown.replace(/`([^`]+)`/g, (match, code) => {
+  // Escape < > inside inline code (`...`) — single-line only, skip fenced blocks
+  markdown = markdown.replace(/(?<!`)(`)(?!`)([^`\n]+)(?<!`)\1(?!`)/g, (match, tick, code) => {
     return '`' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '`';
   });
 
@@ -141,7 +143,7 @@ export async function renderMarkdown(markdown) {
 
   // Process math if detected
   if (hasMath(markdown)) {
-    html = await processMath(html);
+    html = processMath(html);
   }
 
   // Generate TOC from rendered HTML

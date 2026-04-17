@@ -2,6 +2,7 @@ import { findAdapter } from './adapters/index';
 import { renderMarkdown, attachCopyHandlers } from './core/renderer';
 import { injectHeadingIds, createTocSidebar } from './core/toc';
 import { enhanceTables } from './core/table';
+import { createExportButton } from './core/export';
 
 // Track if we've already enhanced this page
 let enhanced = false;
@@ -110,7 +111,7 @@ function showErrorToast(message) {
   const toast = document.createElement('div');
   toast.className = 'md-reader-toast md-reader-toast-error';
   toast.innerHTML = `
-    <span>Markdown Reader: 渲染增强失败</span>
+    <span>Markdown Reader: 渲染增强失败 — ${message}</span>
     <button class="md-reader-toast-close">✕</button>
   `;
   toast.title = message;
