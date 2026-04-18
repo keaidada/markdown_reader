@@ -78,8 +78,8 @@ export class LocalFileAdapter extends BaseAdapter {
     doc.title = filename;
 
     // Set favicon using SVG data URI
-    // M with bold strokes, third stroke is down-arrow, fills the canvas
-    const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><g fill="%230969da"><rect x="8" y="8" width="16" height="90"/><polygon points="24,8 64,56 48,56 8,8"/><polygon points="104,8 64,56 80,56 120,8"/><rect x="104" y="8" width="16" height="68"/><polygon points="112,76 88,76 112,112 136,76"/></g></svg>`;
+    // Flat M with center stroke extending into down-arrow, rounded strokes
+    const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><g fill="none" stroke="%232b2b2b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M32 94 L32 34"/><path d="M32 34 L64 68"/><path d="M64 68 L96 34"/><path d="M96 34 L96 94"/><path d="M64 68 L64 102"/><path d="M48 88 L64 102 L80 88"/></g></svg>`;
     let link = doc.querySelector("link[rel*='icon']");
     if (!link) {
       link = doc.createElement('link');
@@ -90,7 +90,7 @@ export class LocalFileAdapter extends BaseAdapter {
     link.href = `data:image/svg+xml,${faviconSvg}`;
 
     // SVG icon for header
-    const headerIcon = `<svg class="md-reader-local-icon" viewBox="0 0 128 128" fill="none"><g fill="#0969da"><rect x="8" y="8" width="16" height="90"/><polygon points="24,8 64,56 48,56 8,8"/><polygon points="104,8 64,56 80,56 120,8"/><rect x="104" y="8" width="16" height="68"/><polygon points="112,76 88,76 112,112 136,76"/></g></svg>`;
+    const headerIcon = `<svg class="md-reader-local-icon" viewBox="0 0 128 128" fill="none"><g fill="none" stroke="#2b2b2b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M32 94 L32 34"/><path d="M32 34 L64 68"/><path d="M64 68 L96 34"/><path d="M96 34 L96 94"/><path d="M64 68 L64 102"/><path d="M48 88 L64 102 L80 88"/></g></svg>`;
 
     // Create main container
     const wrapper = doc.createElement('div');
