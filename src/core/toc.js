@@ -70,24 +70,92 @@ export function createTocSidebar(tocItems) {
     toggleBtn.title = collapsed ? '展开目录' : '收起目录';
   });
 
-  // Active heading highlight on scroll
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        const link = sidebar.querySelector(`a[href="#${entry.target.id}"]`);
-        if (link) {
-          link.parentElement.classList.toggle('md-reader-toc-active', entry.isIntersecting);
-        }
-      });
-    },
-    { rootMargin: '-20% 0px -80% 0px' }
-  );
+  // ---- Scroll-spy: single-active-item highlight ----
+  // Offset from viewport top — the "reading line". Heading is considered
+  // active once it crosses this line from below.
+  const ACTIVE_OFFSET = 100;
+  const nav = sidebar.querySelector('.md-reader-toc-nav');
+  let headings = [];
+  let activeLink = null;
+  let rafId = null;
+  let userClicking = false; // suppress scroll-spy during programmatic scroll
+
+  function setActive(link) {
+    if (link === activeLink) return;
+    if (activeLink) activeLink.parentElement.classList.remove('md-reader-toc-active');
+    activeLink = link;
+    if (!link) return;
+    link.parentElement.classList.add('md-reader-toc-active');
+
+    // Keep the active item in view inside the sidebar nav
+    const linkRect = link.getBoundingClientRect();
+    const navRect = nav.getBoundingClientRect();
+    if (linkRect.top < navRect.top + 40 || linkRect.bottom > navRect.bottom - 40) {
+      link.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  function updateActive() {
+    rafId = null;
+    if (userClicking) return;
+    if (headings.length === 0) return;
+
+    // Pick the LAST heading whose top is above the reading line.
+    // If none (we're above the first heading), fall back to the first.
+    let current = headings[0];
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top - ACTIVE_OFFSET <= 0) {
+        current = h;
+      } else {
+        break;
+      }
+    }
+
+    // Near page bottom → force last heading (so the final section highlights
+    // even if it's too short to cross the reading line).
+    const nearBottom =
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    if (nearBottom) current = headings[headings.length - 1];
+
+    const link = sidebar.querySelector(`a[href="#${CSS.escape(current.id)}"]`);
+    if (link) setActive(link);
+  }
+
+  function onScroll() {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(updateActive);
+  }
+
+  // Clicking a TOC link: smooth-scroll + lock highlight onto clicked item
+  // until the scroll settles, so spy logic doesn't fight the animation.
+  sidebar.querySelectorAll('.md-reader-toc-nav a').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      const id = link.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      userClicking = true;
+      setActive(link);
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Release the lock after the smooth scroll animation completes (~600ms)
+      clearTimeout(sidebar._clickTimer);
+      sidebar._clickTimer = setTimeout(() => {
+        userClicking = false;
+        updateActive();
+      }, 700);
+    });
+  });
 
   sidebar._observeHeadings = (container) => {
-    tocItems.forEach((item) => {
-      const heading = container.querySelector(`#${CSS.escape(item.id)}`);
-      if (heading) observer.observe(heading);
-    });
+    headings = tocItems
+      .map((item) => container.querySelector(`#${CSS.escape(item.id)}`))
+      .filter(Boolean);
+
+    // Listen on window — works for both normal body scroll and the wrapper-shifted layout
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    // Initial pass
+    updateActive();
   };
 
   return sidebar;
