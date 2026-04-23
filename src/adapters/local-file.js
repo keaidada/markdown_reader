@@ -60,7 +60,7 @@ export class LocalFileAdapter extends BaseAdapter {
     const markdown = await this.getRawMarkdown(doc);
     if (!markdown || markdown.trim().length === 0) return false;
 
-    const { html, toc } = await renderFn(markdown);
+    const { html, toc, frontMatter = {} } = await renderFn(markdown);
 
     // Save original content for toggle
     if (!doc.body.dataset.mdReaderOriginal) {
@@ -73,9 +73,10 @@ export class LocalFileAdapter extends BaseAdapter {
     doc.body.style.padding = '0';
     doc.body.style.background = '#ffffff';
 
-    // Set page title from filename
+    // Set page title: prefer front matter title/displayTitle over filename
     const filename = decodeURIComponent(window.location.pathname.split('/').pop());
-    doc.title = filename;
+    const pageTitle = frontMatter.displayTitle || frontMatter.title || filename;
+    doc.title = pageTitle;
 
     // Set favicon using SVG data URI
     // Flat M with center stroke extending into down-arrow, rounded strokes
@@ -98,7 +99,7 @@ export class LocalFileAdapter extends BaseAdapter {
     wrapper.innerHTML = `
       <div class="md-reader-local-header">
         ${headerIcon}
-        <span class="md-reader-local-filename">${this._escapeHtml(filename)}</span>
+        <span class="md-reader-local-filename">${this._escapeHtml(pageTitle)}</span>
       </div>
       <div class="md-reader-container markdown-body md-reader-enhanced">
         ${html}

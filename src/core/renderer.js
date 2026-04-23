@@ -100,11 +100,46 @@ function processMath(html) {
 }
 
 /**
+ * Parse YAML front matter from the start of a markdown string.
+ * Returns { body, frontMatter } where frontMatter is a key→value map
+ * (simple string values only; no nested YAML parsing needed here).
+ */
+export function parseFrontMatter(markdown) {
+  const match = markdown.match(/^\uFEFF?\s*---\r?\n([\s\S]*?)\n---\r?\n?([\s\S]*)$/);
+  if (!match) return { body: markdown, frontMatter: {} };
+
+  const body = match[2];
+  const frontMatter = {};
+  // Parse simple "key: value" lines (skip multi-line block scalars)
+  let inBlock = false;
+  for (const line of match[1].split('\n')) {
+    if (inBlock) {
+      if (/^\S/.test(line)) inBlock = false; else continue;
+    }
+    const kv = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
+    if (!kv) continue;
+    const val = kv[2].trim();
+    if (val === '|' || val === '>') { inBlock = true; continue; }
+    frontMatter[kv[1]] = val.replace(/^['"]|['"]$/g, '');
+  }
+  return { body, frontMatter };
+}
+
+/**
+ * Strip YAML front matter (--- ... ---) from the start of a markdown string.
+ * GitHub and Jekyll use this; we should not render it as content.
+ */
+function stripFrontMatter(markdown) {
+  return parseFrontMatter(markdown).body;
+}
+
+/**
  * Pre-process markdown to escape angle brackets inside inline code.
  * Prevents `<group>` inside backticks from being parsed as HTML tags.
  * Also escapes bare <word> patterns that aren't real HTML tags.
  */
 function preprocessMarkdown(markdown) {
+  // Note: front matter is already stripped by renderMarkdown before calling here.
   // Escape < > inside inline code (`...`) — single-line only, skip fenced blocks
   markdown = markdown.replace(/(?<!`)(`)(?!`)([^`\n]+)(?<!`)\1(?!`)/g, (match, tick, code) => {
     return '`' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '`';
@@ -138,7 +173,9 @@ function preprocessMarkdown(markdown) {
  */
 export async function renderMarkdown(markdown) {
   const marked = createMarked();
-  markdown = preprocessMarkdown(markdown);
+  // Extract front matter before preprocessing
+  const { body, frontMatter } = parseFrontMatter(markdown);
+  markdown = preprocessMarkdown(body);
   let html = marked.parse(markdown);
 
   // Process math if detected
@@ -149,7 +186,7 @@ export async function renderMarkdown(markdown) {
   // Generate TOC from rendered HTML
   const toc = generateToc(html);
 
-  return { html, toc };
+  return { html, toc, frontMatter };
 }
 
 /**
