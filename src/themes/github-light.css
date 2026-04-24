@@ -556,3 +556,203 @@
     padding: 0 !important;
   }
 }
+
+/* Mermaid diagrams */
+.md-reader-mermaid-wrapper {
+  position: relative;
+  display: block;
+  margin: 16px 0;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+pre.md-reader-mermaid {
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #656d76;
+  white-space: pre-wrap;
+}
+
+/* After mermaid.run() replaces content with SVG, fill wrapper width */
+pre.md-reader-mermaid[data-processed="true"] {
+  white-space: normal;
+}
+pre.md-reader-mermaid svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  /* When the height cap (70vh) kicks in, the SVG is narrower than its
+     container — center it so it sits in the middle of the card. */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Error state: show raw source in a red-bordered block */
+pre.md-reader-mermaid-error {
+  border-left: 3px solid #cf222e !important;
+  padding-left: 12px !important;
+  color: #cf222e !important;
+  text-align: left;
+}
+
+/* Fullscreen button: top-right of the wrapper, fades in on hover */
+.md-reader-mermaid-fs-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  color: #656d76;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 2;
+}
+.md-reader-mermaid-wrapper:hover .md-reader-mermaid-fs-btn,
+.md-reader-mermaid-fs-btn:focus-visible {
+  opacity: 1;
+}
+.md-reader-mermaid-fs-btn:hover {
+  background: #ffffff;
+  color: #1f2328;
+  border-color: #1f232826;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* Fullscreen overlay */
+.md-reader-mermaid-fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  animation: md-reader-fs-fade 0.15s ease-out;
+}
+
+@keyframes md-reader-fs-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.md-reader-mermaid-fs-toolbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(208, 215, 222, 0.8);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+}
+
+.md-reader-mermaid-fs-tool,
+.md-reader-mermaid-fs-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: #656d76;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.md-reader-mermaid-fs-tool:hover,
+.md-reader-mermaid-fs-close:hover {
+  background: #f3f4f6;
+  color: #1f2328;
+}
+.md-reader-mermaid-fs-close {
+  margin-left: 4px;
+  border-left: 1px solid #e5e7eb;
+  padding-left: 4px;
+  border-radius: 0 5px 5px 0;
+  width: 32px;
+}
+
+.md-reader-mermaid-fs-scale {
+  min-width: 44px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #1f2328;
+  user-select: none;
+}
+
+.md-reader-mermaid-fs-stage {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.md-reader-mermaid-fs-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.md-reader-mermaid-fs-content {
+  /* Absolute-center so transform math has a stable reference point.
+     SVG width drives the actual size; translate drives pan. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+  user-select: none;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+}
+
+.md-reader-mermaid-fs-content svg {
+  display: block;
+  max-width: none !important;
+  max-height: none !important;
+  background: transparent;
+  height: auto;
+  /* Never let browser apply image-smoothing — vectors redraw natively */
+  image-rendering: auto;
+}
+
+.md-reader-mermaid-fs-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(208, 215, 222, 0.6);
+  border-radius: 999px;
+  color: #656d76;
+  font-size: 12px;
+  pointer-events: none;
+  user-select: none;
+}

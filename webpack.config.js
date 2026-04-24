@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 const CopyPlugin = require('copy-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
@@ -23,6 +24,10 @@ module.exports = {
     ],
   },
   plugins: [
+    // Chrome extension content scripts cannot dynamically load chunk files
+    // at runtime. Force webpack to emit every entry as a single file, inlining
+    // any dynamic import() calls (mermaid relies on these internally).
+    new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
     new MiniCssExtractPlugin({
       filename: '[name].css',
     }),

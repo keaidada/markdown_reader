@@ -1,5 +1,5 @@
 import { findAdapter } from './adapters/index';
-import { renderMarkdown, attachCopyHandlers } from './core/renderer';
+import { renderMarkdown, attachCopyHandlers, initMermaid } from './core/renderer';
 import { injectHeadingIds, createTocSidebar } from './core/toc';
 import { enhanceTables } from './core/table';
 import { createExportButton } from './core/export';
@@ -35,6 +35,7 @@ async function main() {
         adapter.postProcess(container);
         attachCopyHandlers(container);
         enhanceTables(container);
+        initMermaid(container);
 
         // TOC sidebar — left-right layout
         if (toc && toc.length > 2) {
@@ -75,6 +76,7 @@ async function main() {
     adapter.postProcess(container);
     attachCopyHandlers(container);
     enhanceTables(container);
+    initMermaid(container);
 
     if (toc.length > 2) {
       const tocSidebar = createTocSidebar(toc);
