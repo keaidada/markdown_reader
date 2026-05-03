@@ -53,6 +53,7 @@ function createMarked() {
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
         }
+        source = sanitizeMermaidSource(source);
         return `<div class="md-reader-mermaid-wrapper"><pre class="mermaid md-reader-mermaid">${escapeHtml(source)}</pre></div>`;
       }
 
@@ -82,14 +83,65 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
+// sequenceDiagram 的保留关键字。若 participant/actor 的 id 命中这些词
+// （大小写不敏感），mermaid 解析器会把它当关键字用，报 Syntax error。
+// 见 https://mermaid.js.org/syntax/sequenceDiagram.html
+const MERMAID_SEQ_RESERVED = new Set([
+  'opt', 'alt', 'else', 'loop', 'par', 'and', 'rect', 'critical', 'option',
+  'break', 'end', 'note', 'activate', 'deactivate', 'autonumber',
+  'participant', 'actor', 'box', 'link', 'links', 'properties', 'details',
+]);
+
+/**
+ * Rename participant/actor aliases in sequenceDiagram that collide with
+ * mermaid reserved keywords. Only touches sequenceDiagram blocks; other
+ * diagram types are returned untouched to avoid false positives.
+ */
+function sanitizeMermaidSource(source) {
+  const firstNonEmpty = source.split('\n').find((l) => l.trim().length > 0) || '';
+  if (!/^\s*sequenceDiagram\b/.test(firstNonEmpty)) return source;
+
+  const rename = new Map();
+  const participantRe = /^\s*(?:participant|actor)\s+([^\s]+?)(?:\s+as\s+.*)?\s*$/i;
+  for (const line of source.split('\n')) {
+    const m = line.match(participantRe);
+    if (!m) continue;
+    const id = m[1];
+    if (MERMAID_SEQ_RESERVED.has(id.toLowerCase()) && !rename.has(id)) {
+      let safe = id + '_';
+      while (MERMAID_SEQ_RESERVED.has(safe.toLowerCase())) safe += '_';
+      rename.set(id, safe);
+    }
+  }
+  if (rename.size === 0) return source;
+
+  let out = source;
+  for (const [from, to] of rename) {
+    const re = new RegExp(`(^|[^\\w])${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[^\\w]|$)`, 'g');
+    out = out.replace(re, (_m, pre) => pre + to);
+  }
+  return out;
+}
+
 /**
  * Process math expressions in HTML string using KaTeX,
- * skipping content inside <pre> and <code> tags.
+ * skipping content inside <pre>, <code> tags, and any HTML tag attributes.
+ *
+ * We split the HTML into alternating "process" and "skip" segments. Skip
+ * segments include full <pre>...</pre> and <code>...</code> blocks (so math
+ * syntax inside code isn't interpreted) AND every individual HTML tag
+ * (anything from `<` to the next `>`). Skipping tags is important because the
+ * Copy button we emit for fenced code blocks stores the raw source in a
+ * `data-code="..."` attribute; without this, a SQL block containing `$$...$$`
+ * (e.g. PostgreSQL dollar-quoted strings) would have its attribute value
+ * rewritten into KaTeX HTML — the injected `"` character breaks out of the
+ * attribute and leaks markup into the page.
  */
 function processMath(html) {
-  // Split HTML into segments: code/pre blocks vs. normal text
-  // We only process math in normal text segments
-  const parts = html.split(/(<pre[\s>][\s\S]*?<\/pre>|<code[\s>][\s\S]*?<\/code>)/gi);
+  // Split order matters: the <pre> and <code> alternatives consume their full
+  // content first, so the generic <[^>]*> tag pattern only kicks in on tags
+  // outside those regions.
+  const parts = html.split(/(<pre[\s>][\s\S]*?<\/pre>|<code[\s>][\s\S]*?<\/code>|<[^>]*>)/gi);
 
   for (let i = 0; i < parts.length; i++) {
     // Odd indices are code/pre blocks — skip them
@@ -158,22 +210,52 @@ function stripFrontMatter(markdown) {
 }
 
 /**
- * Pre-process markdown to escape angle brackets inside inline code.
- * Prevents `<group>` inside backticks from being parsed as HTML tags.
- * Also escapes bare <word> patterns that aren't real HTML tags.
+ * Pre-process markdown to escape bare <word> patterns that aren't real HTML
+ * tags (so `<uuid>` in prose renders as literal text instead of being swallowed
+ * as an unknown HTML element). marked already escapes `<` / `>` inside inline
+ * code and fenced code blocks correctly on its own — we intentionally do NOT
+ * touch those regions, because pre-escaping them would double-escape through
+ * marked's own code-content escaping (turning `<uuid>` into
+ * `&amp;lt;uuid&amp;gt;`, which renders as the literal string `&lt;uuid&gt;`).
+ *
+ * Also fixes a CommonMark / CJK interop bug with bold spans: patterns like
+ * `是**"一套"**，你` don't render as <strong> because CommonMark's
+ * left-flanking rule fails when a CJK letter sits right before `**` that is
+ * followed by ASCII/Unicode punctuation (the inner char). We inject a
+ * zero-width space (U+200B) between the marker and the inner punct on the
+ * failing side so the flanking rule passes. Symmetrically for the closing
+ * side when a CJK letter follows `**` preceded by punctuation.
  */
 function preprocessMarkdown(markdown) {
   // Note: front matter is already stripped by renderMarkdown before calling here.
-  // Escape < > inside inline code (`...`) — single-line only, skip fenced blocks
-  markdown = markdown.replace(/(?<!`)(`)(?!`)([^`\n]+)(?<!`)\1(?!`)/g, (match, tick, code) => {
-    return '`' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '`';
-  });
 
   // Escape bare <word> that aren't known HTML tags (outside code blocks)
   // Known self-closing or common HTML tags to preserve
   const htmlTags = /^(a|abbr|address|article|aside|audio|b|bdi|bdo|blockquote|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hgroup|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|math|menu|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|search|section|select|slot|small|source|span|strong|style|sub|summary|sup|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr)$/i;
 
-  // Process line by line, skip fenced code blocks
+  // CJK letter ranges: CJK Unified, Extension A, Compatibility Ideographs,
+  // Hiragana + Katakana, and Hangul syllables.
+  const cjkCharRe = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
+  const punctStartRe = /^[\p{P}\p{S}]/u;
+  const punctEndRe = /[\p{P}\p{S}]$/u;
+  // Match a non-nested **...** or __...__ span. We don't allow `*` or `_` in
+  // the inner content (which would indicate nesting or a literal marker);
+  // such rare cases fall back to CommonMark's default behavior.
+  const boldSpanRe = /(\*\*|__)(?!\s)([^*_\n]+?)(?<!\s)\1/gu;
+  const ZWSP = '\u200b';
+
+  const fixCjkBold = (text) =>
+    text.replace(boldSpanRe, (match, marker, inner, offset, full) => {
+      const leftCtx = offset > 0 ? full[offset - 1] : '';
+      const rightCtx = full[offset + match.length] || '';
+      const brokenOpen = cjkCharRe.test(leftCtx) && punctStartRe.test(inner);
+      const brokenClose = cjkCharRe.test(rightCtx) && punctEndRe.test(inner);
+      if (!brokenOpen && !brokenClose) return match;
+      return `${marker}${brokenOpen ? ZWSP : ''}${inner}${brokenClose ? ZWSP : ''}${marker}`;
+    });
+
+  // Process line by line, skip fenced code blocks. Within each prose line,
+  // also skip inline-code spans (`...`) so marked's own escaping applies there.
   const lines = markdown.split('\n');
   let inCodeBlock = false;
   for (let i = 0; i < lines.length; i++) {
@@ -183,11 +265,20 @@ function preprocessMarkdown(markdown) {
     }
     if (inCodeBlock) continue;
 
-    // Replace <word> patterns that aren't real HTML tags
-    lines[i] = lines[i].replace(/<([a-zA-Z\u4e00-\u9fff][a-zA-Z0-9\u4e00-\u9fff_-]*)>/g, (match, tag) => {
-      if (htmlTags.test(tag)) return match;
-      return '&lt;' + tag + '&gt;';
-    });
+    // Split the line on inline-code spans; even indices are prose, odd indices
+    // are the backtick-wrapped code (kept verbatim so marked handles it).
+    const parts = lines[i].split(/(`[^`\n]+`)/g);
+    const bareTagRe = /<([a-zA-Z\u4e00-\u9fff][a-zA-Z0-9\u4e00-\u9fff_-]*)>/g;
+    for (let j = 0; j < parts.length; j++) {
+      if (j % 2 === 1) continue; // inline-code span - leave for marked
+      let segment = parts[j].replace(bareTagRe, (match, tag) => {
+        if (htmlTags.test(tag)) return match;
+        return '&lt;' + tag + '&gt;';
+      });
+      segment = fixCjkBold(segment);
+      parts[j] = segment;
+    }
+    lines[i] = parts.join('');
   }
   return lines.join('\n');
 }
