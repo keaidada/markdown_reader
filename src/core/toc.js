@@ -64,8 +64,9 @@ const AUTO_COLLAPSE_THRESHOLD = 30;
 // Chevron icon — CSS rotates it to point down (expanded) or right (collapsed)
 const CHEVRON_SVG = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>`;
 
-// Double chevron icon for the "collapse to top level" action (rotated 180deg when active)
-const COLLAPSE_SVG = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 11.5l4-4 4 4"/><path d="M4 5.5l4-4 4 4"/></svg>`;
+// Double chevron icon (Octicons chevrons-up) for the "collapse to top level"
+// action — CSS rotates it 180deg when active (chevrons-down = expand all)
+const COLLAPSE_SVG = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.78a.75.75 0 01-1.06 0L2.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L4.06 8l3.72 3.72a.75.75 0 010 1.06zm4 0a.75.75 0 01-1.06 0L6.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L8.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>`;
 
 function renderTree(nodes) {
   if (!nodes || nodes.length === 0) return '';
@@ -189,17 +190,30 @@ export function createTocSidebar(tocItems) {
     toggleBtn.title = collapsed ? '展开目录' : '收起目录';
   });
 
-  // Global "collapse to top level / expand all" — session-only, active branch stays open
+  // Global "collapse to top level / expand all" — session-only.
+  // Collapses every branch except the path to the active heading, recursively,
+  // so a single-h1 document still folds down to its first level.
   let topLevelCollapsed = false;
+
+  function foldExceptActive(nodes) {
+    [...nodes].forEach((li) => {
+      const children = li.querySelector(':scope > .md-reader-toc-children');
+      if (!children) return; // leaf
+      if (activeLink && li.contains(activeLink)) {
+        setCollapsed(li, false, false);
+        foldExceptActive(children.children);
+      } else {
+        setCollapsed(li, true, false);
+      }
+    });
+  }
 
   collapseBtn.addEventListener('click', () => {
     topLevelCollapsed = !topLevelCollapsed;
     collapseBtn.classList.toggle('active', topLevelCollapsed);
     collapseBtn.title = topLevelCollapsed ? '全部展开' : '折叠到一级';
     if (topLevelCollapsed) {
-      nav.querySelectorAll(':scope > .md-reader-toc-children > .md-reader-toc-node').forEach((li) => {
-        setCollapsed(li, !(activeLink && li.contains(activeLink)), false);
-      });
+      foldExceptActive(nav.querySelector(':scope > .md-reader-toc-children').children);
     } else {
       nav.querySelectorAll('.md-reader-toc-node').forEach((li) => {
         setCollapsed(li, false, false);
@@ -307,10 +321,8 @@ export function createTocSidebar(tocItems) {
     }
 
     // Very long documents auto-collapse to the top level (session-only)
-    if (tocItems.length > AUTO_COLLAPSE_THRESHOLD) {
-      nav.querySelectorAll(':scope > .md-reader-toc-children > .md-reader-toc-node').forEach((li) => {
-        if (!(activeLink && li.contains(activeLink))) setCollapsed(li, true, false);
-      });
+    if (tocItems.length > AUTO_COLLAPSE_THRESHOLD && nav.querySelector('.md-reader-toc-children')) {
+      foldExceptActive(nav.querySelector(':scope > .md-reader-toc-children').children);
     }
   };
 

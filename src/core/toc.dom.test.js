@@ -114,8 +114,9 @@ describe('createTocSidebar', () => {
     btn.click();
 
     const [intro, setup2, usage] = topNodes(sidebar);
-    expect(intro.classList.contains('collapsed')).toBe(true);
-    expect(usage.classList.contains('collapsed')).toBe(true);
+    // intro and usage are leaves — skipped by the global collapse
+    expect(intro.classList.contains('collapsed')).toBe(false);
+    expect(usage.classList.contains('collapsed')).toBe(false);
     // setup was already collapsed; it stays collapsed
     expect(setup2.classList.contains('collapsed')).toBe(true);
     expect(btn.classList.contains('active')).toBe(true);
@@ -131,5 +132,48 @@ describe('createTocSidebar', () => {
   it('hides the collapse button when every node is a leaf', () => {
     const sidebar = createTocSidebar([{ id: 'a', text: 'A', level: 1 }]);
     expect(sidebar.querySelector('.md-reader-toc-collapse-btn').style.display).toBe('none');
+  });
+
+  it('collapses recursive branches but keeps the active path open (single-h1 doc)', async () => {
+    const items = [
+      { id: 'root', text: 'Root', level: 1 },
+      { id: 'install', text: 'Install', level: 2 },
+      { id: 'npm', text: 'Npm', level: 3 },
+      { id: 'yarn', text: 'Yarn', level: 3 },
+      { id: 'config', text: 'Config', level: 2 },
+      { id: 'deep', text: 'Deep', level: 3 },
+      { id: 'usage', text: 'Usage', level: 2 },
+    ];
+    mockChromeStorage({});
+    const sidebar = createTocSidebar(items);
+    document.body.appendChild(sidebar);
+
+    // Simulate layout: every heading above the reading line → last one is active
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 5000, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const container = document.createElement('div');
+    items.forEach((item) => {
+      const h = document.createElement('h' + item.level);
+      h.id = item.id;
+      h.textContent = item.text;
+      h.getBoundingClientRect = () => ({
+        top: 0, bottom: 30, height: 30,
+        left: 0, right: 0, width: 0, x: 0, y: 0, toJSON() {},
+      });
+      container.appendChild(h);
+    });
+    document.body.appendChild(container);
+    await sidebar._observeHeadings(container);
+    expect(sidebar.querySelector('.md-reader-toc-active a').textContent).toBe('Usage');
+
+    const byId = (id) => sidebar.querySelector(`.md-reader-toc-node[data-id="${id}"]`);
+    sidebar.querySelector('.md-reader-toc-collapse-btn').click();
+
+    // Active path stays open: root > usage
+    expect(byId('root').classList.contains('collapsed')).toBe(false);
+    expect(byId('usage').classList.contains('collapsed')).toBe(false);
+    // Other branches collapse
+    expect(byId('install').classList.contains('collapsed')).toBe(true);
+    expect(byId('config').classList.contains('collapsed')).toBe(true);
   });
 });
