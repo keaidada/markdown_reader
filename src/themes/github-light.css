@@ -276,6 +276,15 @@
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
+/* Header action buttons (collapse-to-level-1 + whole-sidebar toggle) */
+.md-reader-toc-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* Remove header bottom line when collapsed */
 .md-reader-toc-collapsed .md-reader-toc-header {
   border-bottom-color: transparent;
@@ -299,7 +308,8 @@
   width: 0;
 }
 
-.md-reader-toc-toggle {
+.md-reader-toc-toggle,
+.md-reader-toc-collapse-btn {
   width: 28px;
   height: 28px;
   display: flex;
@@ -313,10 +323,10 @@
   transition: all 0.2s ease;
   flex-shrink: 0;
   padding: 0;
-  margin-left: auto;
 }
 
-.md-reader-toc-toggle:hover {
+.md-reader-toc-toggle:hover,
+.md-reader-toc-collapse-btn:hover {
   background: #f3f4f6;
   color: #1f2328;
   border-color: #1f232826;
@@ -326,6 +336,28 @@
   width: 16px;
   height: 16px;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.md-reader-toc-collapse-btn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* "Collapse to top level" is active — icon flips to "expand all" */
+.md-reader-toc-collapse-btn.active {
+  background: #ddf4ff;
+  color: #0969da;
+  border-color: #54aeff66;
+}
+
+.md-reader-toc-collapse-btn.active svg {
+  transform: rotate(180deg);
+}
+
+/* When the whole sidebar is a narrow rail, only the toggle remains */
+.md-reader-toc-collapsed .md-reader-toc-collapse-btn {
+  display: none;
 }
 
 .md-reader-toc-collapsed .md-reader-toc-toggle svg {
@@ -357,9 +389,34 @@
   padding: 0;
 }
 
-.md-reader-toc-item a {
+/* ===== TOC tree (hierarchical collapse/expand) ===== */
+
+.md-reader-toc-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-reader-toc-children .md-reader-toc-children {
+  padding-left: 14px;
+}
+
+/* Collapsed node hides its direct children */
+.md-reader-toc-node.collapsed > .md-reader-toc-children {
+  display: none;
+}
+
+.md-reader-toc-row {
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+}
+
+.md-reader-toc-row a {
+  flex: 1;
+  min-width: 0;
   display: block;
-  padding: 4px 12px 4px 16px;
+  padding: 4px 12px 4px 2px;
   color: #656d76;
   text-decoration: none;
   line-height: 1.6;
@@ -371,25 +428,68 @@
   white-space: nowrap;
 }
 
-.md-reader-toc-item a:hover {
+.md-reader-toc-row a:hover {
   color: #0969da;
   background: #f6f8fa;
   border-left-color: #d0d7de;
 }
 
-.md-reader-toc-active a {
+.md-reader-toc-row.md-reader-toc-active a {
   color: #0969da !important;
   border-left-color: #0969da !important;
   font-weight: 500;
   background: #ddf4ff;
 }
 
-.md-reader-toc-level-1 a { padding-left: 16px; font-weight: 600; font-size: 13px; }
-.md-reader-toc-level-2 a { padding-left: 28px; }
-.md-reader-toc-level-3 a { padding-left: 40px; font-size: 12px; }
-.md-reader-toc-level-4 a { padding-left: 52px; font-size: 12px; }
-.md-reader-toc-level-5 a { padding-left: 64px; font-size: 12px; }
-.md-reader-toc-level-6 a { padding-left: 76px; font-size: 12px; }
+/* Top-level rows are emphasized — the "first level" of the document */
+.md-reader-toc-node > .md-reader-toc-row a {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* Deeper rows shrink slightly */
+.md-reader-toc-children .md-reader-toc-children a {
+  font-size: 12px;
+}
+
+/* Caret button — points down when expanded, right when collapsed */
+.md-reader-toc-caret {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #656d76;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.md-reader-toc-caret:hover {
+  background: rgba(175, 184, 193, 0.35);
+  color: #1f2328;
+}
+
+.md-reader-toc-caret svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(90deg); /* down = expanded */
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.md-reader-toc-node.collapsed > .md-reader-toc-row .md-reader-toc-caret svg {
+  transform: rotate(180deg); /* right = collapsed */
+}
+
+/* Alignment spacer for leaf rows (no caret) */
+.md-reader-toc-caret-spacer {
+  width: 24px;
+  flex-shrink: 0;
+}
 
 /* Content area shifts right when TOC is open */
 .md-reader-has-toc {

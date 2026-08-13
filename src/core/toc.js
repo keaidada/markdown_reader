@@ -5,15 +5,15 @@
 export function generateToc(html) {
   const toc = [];
   // Match h1-h6 tags and extract text content
-  const headingRegex = /<h([1-6])[^>]*(?:id="([^"]*)")?[^>]*>([\s\S]*?)<\/h\1>/gi;
+  const headingRegex = /<h([1-6])([^>]*)>([\s\S]*?)<\/h\1>/gi;
   let match;
   let index = 0;
 
   while ((match = headingRegex.exec(html)) !== null) {
     const level = parseInt(match[1], 10);
-    const existingId = match[2];
+    const idMatch = match[2].match(/id="([^"]*)"/);
     const rawText = match[3].replace(/<[^>]+>/g, '').trim();
-    const id = existingId || slugify(rawText) + '-' + index;
+    const id = idMatch ? idMatch[1] : slugify(rawText) + '-' + index;
     toc.push({ id, text: rawText, level });
     index++;
   }
@@ -35,50 +35,193 @@ export function injectHeadingIds(html) {
   });
 }
 
-// SVG chevron icon for the toggle button
+/**
+ * Build a nested tree from a flat TOC list.
+ * The lowest heading level present in the document acts as the root level
+ * (h1 normally; falls back to h2/h3 when the document has no h1).
+ * Each item becomes the child of the nearest preceding item with a smaller level.
+ */
+export function buildTree(items) {
+  const roots = [];
+  if (!items || items.length === 0) return roots;
+
+  const minLevel = Math.min(...items.map((item) => item.level));
+  const stack = [{ level: minLevel - 1, children: roots }];
+
+  for (const item of items) {
+    const node = { id: item.id, text: item.text, level: item.level, children: [] };
+    while (stack[stack.length - 1].level >= node.level) stack.pop();
+    stack[stack.length - 1].children.push(node);
+    stack.push(node);
+  }
+
+  return roots;
+}
+
+// Sidebar auto-collapses to the top level when the document has more items than this
+const AUTO_COLLAPSE_THRESHOLD = 30;
+
+// Chevron icon — CSS rotates it to point down (expanded) or right (collapsed)
 const CHEVRON_SVG = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z"/></svg>`;
 
+// Double chevron icon for the "collapse to top level" action (rotated 180deg when active)
+const COLLAPSE_SVG = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 11.5l4-4 4 4"/><path d="M4 5.5l4-4 4 4"/></svg>`;
+
+function renderTree(nodes) {
+  if (!nodes || nodes.length === 0) return '';
+  return `<ul class="md-reader-toc-children">${nodes.map(renderNode).join('')}</ul>`;
+}
+
+function renderNode(node) {
+  const hasChildren = node.children.length > 0;
+  return `
+    <li class="md-reader-toc-node${hasChildren ? '' : ' md-reader-toc-leaf'}" data-id="${node.id}">
+      <div class="md-reader-toc-row">
+        ${hasChildren
+          ? `<button class="md-reader-toc-caret" title="折叠">${CHEVRON_SVG}</button>`
+          : '<span class="md-reader-toc-caret-spacer"></span>'}
+        <a href="#${node.id}">${node.text}</a>
+      </div>
+      ${hasChildren ? renderTree(node.children) : ''}
+    </li>`;
+}
+
 /**
- * Create a left-side TOC sidebar element with smooth collapse/expand
+ * Create a left-side TOC sidebar with a hierarchical tree.
+ * Features:
+ *  - per-node collapse/expand, persisted per document (chrome.storage.local)
+ *  - global "collapse to top level" button (session-only, keeps active branch open)
+ *  - auto-collapse to top level for documents with more than AUTO_COLLAPSE_THRESHOLD items
+ *  - scroll-spy that re-opens the branch containing the active heading
  */
 export function createTocSidebar(tocItems) {
   if (!tocItems || tocItems.length === 0) return null;
+
+  const tree = buildTree(tocItems);
 
   const sidebar = document.createElement('div');
   sidebar.className = 'md-reader-toc-sidebar';
   sidebar.innerHTML = `
     <div class="md-reader-toc-header">
       <span class="md-reader-toc-title">目录</span>
-      <button class="md-reader-toc-toggle" title="收起目录">${CHEVRON_SVG}</button>
+      <div class="md-reader-toc-actions">
+        <button class="md-reader-toc-collapse-btn" title="折叠到一级">${COLLAPSE_SVG}</button>
+        <button class="md-reader-toc-toggle" title="收起目录">${CHEVRON_SVG}</button>
+      </div>
     </div>
-    <nav class="md-reader-toc-nav">
-      <ul>
-        ${tocItems.map(item => `
-          <li class="md-reader-toc-item md-reader-toc-level-${item.level}">
-            <a href="#${item.id}">${item.text}</a>
-          </li>
-        `).join('')}
-      </ul>
-    </nav>
+    <nav class="md-reader-toc-nav">${renderTree(tree)}</nav>
   `;
 
-  // Toggle collapse/expand — all animation handled by CSS transitions
+  const nav = sidebar.querySelector('.md-reader-toc-nav');
+  const collapseBtn = sidebar.querySelector('.md-reader-toc-collapse-btn');
   const toggleBtn = sidebar.querySelector('.md-reader-toc-toggle');
 
+  // Hide the collapse button when there is nothing to collapse
+  if (!nav.querySelector('.md-reader-toc-caret')) collapseBtn.style.display = 'none';
+
+  // ---- Collapse state, persisted per document ----
+  const collapsedIds = new Set();
+  let saveTimer = null;
+
+  function docKey() {
+    return 'tocState:' + window.location.href.split('#')[0];
+  }
+
+  function loadCollapsedIds() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(docKey()).then((result) => {
+          const saved = result && result[docKey()];
+          if (saved && Array.isArray(saved.collapsed)) {
+            saved.collapsed.forEach((id) => collapsedIds.add(id));
+          }
+          resolve();
+        });
+      } catch {
+        resolve();
+      }
+    });
+  }
+
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        chrome.storage.local.set({ [docKey()]: { collapsed: [...collapsedIds] } }).catch(() => {});
+      } catch {
+        // storage unavailable — state just isn't remembered
+      }
+    }, 300);
+  }
+
+  // persist=false keeps the change session-only (global collapse / auto-expand)
+  function setCollapsed(li, collapsed, persist) {
+    li.classList.toggle('collapsed', collapsed);
+    if (!persist) return;
+    const id = li.dataset.id;
+    if (collapsed) collapsedIds.add(id);
+    else collapsedIds.delete(id);
+    scheduleSave();
+  }
+
+  function applyPersistedState() {
+    collapsedIds.forEach((id) => {
+      const li = nav.querySelector(`.md-reader-toc-node[data-id="${CSS.escape(id)}"]`);
+      if (li && li.querySelector(':scope > .md-reader-toc-children')) {
+        li.classList.add('collapsed');
+      }
+    });
+  }
+
+  // Per-node caret toggling
+  nav.querySelectorAll('.md-reader-toc-caret').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const li = btn.closest('.md-reader-toc-node');
+      const collapsing = !li.classList.contains('collapsed');
+      setCollapsed(li, collapsing, true);
+      btn.title = collapsing ? '展开' : '折叠';
+    });
+  });
+
+  // Whole-sidebar collapse/expand — all animation handled by CSS transitions
   toggleBtn.addEventListener('click', () => {
     const collapsed = sidebar.classList.toggle('md-reader-toc-collapsed');
     toggleBtn.title = collapsed ? '展开目录' : '收起目录';
   });
 
+  // Global "collapse to top level / expand all" — session-only, active branch stays open
+  let topLevelCollapsed = false;
+
+  collapseBtn.addEventListener('click', () => {
+    topLevelCollapsed = !topLevelCollapsed;
+    collapseBtn.classList.toggle('active', topLevelCollapsed);
+    collapseBtn.title = topLevelCollapsed ? '全部展开' : '折叠到一级';
+    if (topLevelCollapsed) {
+      nav.querySelectorAll(':scope > .md-reader-toc-children > .md-reader-toc-node').forEach((li) => {
+        setCollapsed(li, !(activeLink && li.contains(activeLink)), false);
+      });
+    } else {
+      nav.querySelectorAll('.md-reader-toc-node').forEach((li) => {
+        setCollapsed(li, false, false);
+      });
+    }
+  });
+
   // ---- Scroll-spy: single-active-item highlight ----
-  // Offset from viewport top — the "reading line". Heading is considered
-  // active once it crosses this line from below.
   const ACTIVE_OFFSET = 100;
-  const nav = sidebar.querySelector('.md-reader-toc-nav');
   let headings = [];
   let activeLink = null;
   let rafId = null;
   let userClicking = false; // suppress scroll-spy during programmatic scroll
+
+  // Session-only: open every collapsed ancestor so the active heading stays visible
+  function expandAncestors(li) {
+    let cur = li;
+    while (cur) {
+      cur.classList.remove('collapsed');
+      cur = cur.parentElement ? cur.parentElement.closest('.md-reader-toc-node') : null;
+    }
+  }
 
   function setActive(link) {
     if (link === activeLink) return;
@@ -86,6 +229,9 @@ export function createTocSidebar(tocItems) {
     activeLink = link;
     if (!link) return;
     link.parentElement.classList.add('md-reader-toc-active');
+
+    const li = link.closest('.md-reader-toc-node');
+    if (li) expandAncestors(li);
 
     // Keep the active item in view inside the sidebar nav
     const linkRect = link.getBoundingClientRect();
@@ -101,7 +247,6 @@ export function createTocSidebar(tocItems) {
     if (headings.length === 0) return;
 
     // Pick the LAST heading whose top is above the reading line.
-    // If none (we're above the first heading), fall back to the first.
     let current = headings[0];
     for (const h of headings) {
       if (h.getBoundingClientRect().top - ACTIVE_OFFSET <= 0) {
@@ -111,8 +256,7 @@ export function createTocSidebar(tocItems) {
       }
     }
 
-    // Near page bottom → force last heading (so the final section highlights
-    // even if it's too short to cross the reading line).
+    // Near page bottom → force last heading
     const nearBottom =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
     if (nearBottom) current = headings[headings.length - 1];
@@ -127,7 +271,6 @@ export function createTocSidebar(tocItems) {
   }
 
   // Clicking a TOC link: smooth-scroll + lock highlight onto clicked item
-  // until the scroll settles, so spy logic doesn't fight the animation.
   sidebar.querySelectorAll('.md-reader-toc-nav a').forEach((link) => {
     link.addEventListener('click', (e) => {
       const id = link.getAttribute('href').slice(1);
@@ -137,7 +280,6 @@ export function createTocSidebar(tocItems) {
       userClicking = true;
       setActive(link);
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Release the lock after the smooth scroll animation completes (~600ms)
       clearTimeout(sidebar._clickTimer);
       sidebar._clickTimer = setTimeout(() => {
         userClicking = false;
@@ -146,7 +288,7 @@ export function createTocSidebar(tocItems) {
     });
   });
 
-  sidebar._observeHeadings = (container) => {
+  sidebar._observeHeadings = async (container) => {
     headings = tocItems
       .map((item) => container.querySelector(`#${CSS.escape(item.id)}`))
       .filter(Boolean);
@@ -154,8 +296,22 @@ export function createTocSidebar(tocItems) {
     // Listen on window — works for both normal body scroll and the wrapper-shifted layout
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
-    // Initial pass
     updateActive();
+
+    // Restore per-document collapse state, then re-open the active branch
+    await loadCollapsedIds();
+    applyPersistedState();
+    if (activeLink) {
+      const li = activeLink.closest('.md-reader-toc-node');
+      if (li) expandAncestors(li);
+    }
+
+    // Very long documents auto-collapse to the top level (session-only)
+    if (tocItems.length > AUTO_COLLAPSE_THRESHOLD) {
+      nav.querySelectorAll(':scope > .md-reader-toc-children > .md-reader-toc-node').forEach((li) => {
+        if (!(activeLink && li.contains(activeLink))) setCollapsed(li, true, false);
+      });
+    }
   };
 
   return sidebar;
