@@ -3,9 +3,95 @@
  */
 
 /**
+ * Create a clean clone of the container prepared for export:
+ * - resolve relative <img> src against the current page (document.baseURI)
+ * - fetch image bytes (best-effort) so they can be embedded into the export
+ * - drop interactive-only elements (code copy buttons) that leak attributes
+ *
+ * Returns { clone, images } where images is a list of
+ * { img, abs, dataUrl } — dataUrl is null when the fetch failed and the
+ * caller must fall back to the absolute URL.
+ */
+async function prepareExportClone(container) {
+  const clone = container.cloneNode(true);
+
+  // Copy buttons carry the whole source in data-code — pure noise in exports
+  clone.querySelectorAll('.md-reader-code-header').forEach((el) => el.remove());
+
+  const images = [];
+  const imgs = Array.from(clone.querySelectorAll('img[src]'));
+  await Promise.all(imgs.map(async (img) => {
+    const raw = img.getAttribute('src');
+    if (!raw) return;
+
+    // Already-inline images are usable as-is
+    if (raw.startsWith('data:')) {
+      images.push({ img, abs: raw, dataUrl: raw });
+      return;
+    }
+
+    // Resolve against the page URL first — relative paths are meaningless
+    // inside a standalone exported file.
+    let abs;
+    try {
+      abs = new URL(raw, document.baseURI).href;
+    } catch {
+      return;
+    }
+
+    // Try to fetch the image bytes in the page context first (same-origin is
+    // usually fine). On failure (file:// scheme forbidden, CORS, auth), fall
+    // back to the background service worker, which fetches with extension
+    // privileges (host_permissions).
+    let dataUrl = null;
+    try {
+      const resp = await fetch(abs, { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) throw new Error(`not an image: ${blob.type}`);
+      dataUrl = await blobToDataUrl(blob);
+    } catch {
+      dataUrl = await fetchImageViaBackground(abs);
+    }
+    images.push({ img, abs, dataUrl });
+  }));
+
+  return { clone, images };
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Ask the background service worker to fetch an image with extension
+ * privileges (works for file:// URLs when the user enabled file access, and
+ * for cross-origin images that page-context fetch would block on CORS).
+ * Returns a data URL or null.
+ */
+async function fetchImageViaBackground(url) {
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'fetch-image', url });
+    if (resp && resp.ok && resp.dataUrl) return resp.dataUrl;
+  } catch {
+    // background unavailable (e.g. extension reloading)
+  }
+  return null;
+}
+
+/**
  * Get the full styled HTML content for export
  */
-function getStyledHtml(container, title) {
+async function getStyledHtml(container, title) {
+  const { clone, images } = await prepareExportClone(container);
+  // Inline bytes as data URIs; fall back to the absolute URL
+  images.forEach(({ img, abs, dataUrl }) => { img.src = dataUrl || abs; });
+
   // Collect all stylesheets from the page
   const styles = [];
   for (const sheet of document.styleSheets) {
@@ -29,16 +115,15 @@ ${styles.join('\n')}
 </style>
 </head>
 <body class="markdown-body">
-${container.innerHTML}
+${clone.innerHTML}
 </body>
 </html>`;
 }
-
 /**
  * Export as HTML file
  */
-export function exportHtml(container, title) {
-  const html = getStyledHtml(container, title);
+export async function exportHtml(container, title) {
+  const html = await getStyledHtml(container, title);
   downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${title}.html`);
 }
 
@@ -50,9 +135,17 @@ export function exportPdf() {
 }
 
 /**
- * Export as Word (.doc) using HTML that Word can open
+ * Export as Word (.doc) using HTML that Word/WPS can open.
+ *
+ * Note: MHTML would be needed for MS Word to render embedded images, but WPS
+ * refuses to open MHTML saved as .doc. Plain HTML with data-URI images opens
+ * in both WPS and Word.
  */
-export function exportWord(container, title) {
+export async function exportWord(container, title) {
+  const { clone, images } = await prepareExportClone(container);
+  // Embed fetched bytes as data URIs; fall back to the absolute URL
+  images.forEach(({ img, abs, dataUrl }) => { img.src = dataUrl || abs; });
+
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>
@@ -64,7 +157,7 @@ table { border-collapse: collapse; } td, th { border: 1px solid #d0d7de; padding
 blockquote { border-left: 4px solid #d0d7de; margin-left: 0; padding-left: 16px; color: #57606a; }
 img { max-width: 100%; }
 </style></head>
-<body>${container.innerHTML}</body></html>`;
+<body>${clone.innerHTML}</body></html>`;
 
   downloadBlob(
     new Blob([html], { type: 'application/msword;charset=utf-8' }),
@@ -132,12 +225,12 @@ export function createExportButton(container, title) {
 
   // Handle format selection
   wrapper.querySelectorAll('.md-reader-export-option').forEach((opt) => {
-    opt.addEventListener('click', () => {
+    opt.addEventListener('click', async () => {
       menu.classList.remove('md-reader-export-menu-open');
       const format = opt.dataset.format;
-      if (format === 'html') exportHtml(container, title);
+      if (format === 'html') await exportHtml(container, title);
       else if (format === 'pdf') exportPdf();
-      else if (format === 'word') exportWord(container, title);
+      else if (format === 'word') await exportWord(container, title);
     });
   });
 

@@ -42,6 +42,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  // Proxy-fetch an image with extension privileges. The content script's page
+  // context cannot fetch file:// URLs (Chrome forbids the scheme) and is
+  // subject to page CORS for cross-origin images; the service worker with
+  // host_permissions can fetch both. Used by export to embed images.
+  if (message.type === 'fetch-image') {
+    (async () => {
+      try {
+        const resp = await fetch(message.url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const type = blob.type || 'image/png';
+        if (!type.startsWith('image/')) throw new Error(`not an image: ${type}`);
+        const buf = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+        }
+        sendResponse({ ok: true, dataUrl: `data:${type};base64,${btoa(binary)}` });
+      } catch (err) {
+        sendResponse({ ok: false, error: String((err && err.message) || err) });
+      }
+    })();
+    return true; // async sendResponse
+  }
 });
 
 // Clean up status when tab is closed
