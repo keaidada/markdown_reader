@@ -856,3 +856,17 @@ pre.md-reader-mermaid-error {
   pointer-events: none;
   user-select: none;
 }
+
+/* --- Image click-to-zoom viewer ------------------------------------------ */
+/* Show the affordance on rendered content images (not icons in the UI) */
+.md-reader-container img {
+  cursor: zoom-in;
+}
+/* Fullscreen image: size driven by JS width, never clamped by page CSS */
+.md-reader-mermaid-fs-content img {
+  display: block;
+  max-width: none !important;
+  max-height: none !important;
+  height: auto;
+  border-radius: 4px;
+}

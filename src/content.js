@@ -2,6 +2,7 @@ import { findAdapter } from './adapters/index';
 import { renderMarkdown, attachCopyHandlers, initMermaid } from './core/renderer';
 import { injectHeadingIds, createTocSidebar } from './core/toc';
 import { enhanceTables } from './core/table';
+import { initImageZoom } from './core/image-zoom';
 import { createExportButton } from './core/export';
 
 // Track if we've already enhanced this page
@@ -36,6 +37,7 @@ async function main() {
         attachCopyHandlers(container);
         enhanceTables(container);
         initMermaid(container);
+        initImageZoom(container);
 
         // TOC sidebar — left-right layout
         if (toc && toc.length > 2) {
@@ -77,6 +79,7 @@ async function main() {
     attachCopyHandlers(container);
     enhanceTables(container);
     initMermaid(container);
+    initImageZoom(container);
 
     if (toc.length > 2) {
       const tocSidebar = createTocSidebar(toc);
