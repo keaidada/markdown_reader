@@ -17,6 +17,8 @@ async function prepareExportClone(container) {
 
   // Copy buttons carry the whole source in data-code — pure noise in exports
   clone.querySelectorAll('.md-reader-code-header').forEach((el) => el.remove());
+  // Mermaid fullscreen buttons are interactive-only
+  clone.querySelectorAll('.md-reader-mermaid-fs-btn').forEach((el) => el.remove());
 
   const images = [];
   const imgs = Array.from(clone.querySelectorAll('img[src]'));
@@ -87,7 +89,7 @@ async function fetchImageViaBackground(url) {
 /**
  * Get the full styled HTML content for export
  */
-async function getStyledHtml(container, title) {
+async function getStyledHtml(container, title, toc) {
   const { clone, images } = await prepareExportClone(container);
   // Inline bytes as data URIs; fall back to the absolute URL
   images.forEach(({ img, abs, dataUrl }) => { img.src = dataUrl || abs; });
@@ -104,26 +106,80 @@ async function getStyledHtml(container, title) {
     }
   }
 
+  const tocNav = buildTocNav(toc);
+
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-body { max-width: 800px; margin: 40px auto; padding: 0 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+body { max-width: 860px; margin: 40px auto; padding: 0 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+pre { overflow-x: auto; }
+table { display: table; }
+.md-reader-table-wrapper, .mdr-tbl-wrap { overflow-x: auto; }
+img { max-width: 100%; }
 ${styles.join('\n')}
+${EXPORT_TOC_CSS}
 </style>
 </head>
 <body class="markdown-body">
 ${clone.innerHTML}
+${tocNav}
+${EXPORT_TOC_JS}
 </body>
 </html>`;
 }
+
+/**
+ * Build a fixed right-side chapter navigation for the exported HTML.
+ * Pure CSS + a tiny scrollspy script — no external dependencies.
+ */
+function buildTocNav(toc) {
+  if (!toc || toc.length < 2) return '';
+  const items = toc.map((t) => {
+    const indent = Math.max(0, t.level - 1) * 12;
+    const text = escapeHtml(t.text);
+    return `<a class="mdr-toc-item" data-lv="${t.level}" href="#${t.id}" style="padding-left:${8 + indent}px" title="${text}">${text}</a>`;
+  }).join('\n');
+  return `<nav class="mdr-export-toc"><div class="mdr-toc-title">目录</div>${items}</nav>`;
+}
+
+const EXPORT_TOC_CSS = `
+.mdr-export-toc { position: fixed; top: 24px; right: 16px; width: 240px; max-height: calc(100vh - 48px); overflow-y: auto; padding: 12px 8px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; font-size: 12px; line-height: 1.5; z-index: 99; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.mdr-toc-title { font-weight: 600; font-size: 13px; padding: 0 8px 8px; color: #1f2328; }
+.mdr-toc-item { display: block; color: #57606a; text-decoration: none; padding: 3px 8px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdr-toc-item:hover { background: #eaeef2; color: #0969da; }
+.mdr-toc-item.active { background: #dbeafe; color: #0969da; font-weight: 600; }
+@media (min-width: 1200px) { body { margin-left: calc(50vw - 430px - 130px); } }
+@media (max-width: 1199px) { .mdr-export-toc { display: none; } }
+@media print { .mdr-export-toc { display: none; } }
+`;
+
+const EXPORT_TOC_JS = `
+<script>
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.mdr-toc-item'));
+  if (!links.length) return;
+  var heads = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+  function update() {
+    var y = window.scrollY + 120, active = -1;
+    for (var i = 0; i < heads.length; i++) {
+      if (heads[i] && heads[i].getBoundingClientRect().top + window.scrollY <= y) active = i;
+    }
+    links.forEach(function (a, i) { a.classList.toggle('active', i === active); });
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+</script>
+`;
+
 /**
  * Export as HTML file
  */
-export async function exportHtml(container, title) {
-  const html = await getStyledHtml(container, title);
+export async function exportHtml(container, title, toc) {
+  const html = await getStyledHtml(container, title, toc);
   downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${title}.html`);
 }
 
@@ -185,7 +241,7 @@ function escapeHtml(text) {
 /**
  * Create the export dropdown button element
  */
-export function createExportButton(container, title) {
+export function createExportButton(container, title, toc) {
   const wrapper = document.createElement('div');
   wrapper.className = 'md-reader-export-wrapper';
   wrapper.innerHTML = `
@@ -228,7 +284,7 @@ export function createExportButton(container, title) {
     opt.addEventListener('click', async () => {
       menu.classList.remove('md-reader-export-menu-open');
       const format = opt.dataset.format;
-      if (format === 'html') await exportHtml(container, title);
+      if (format === 'html') await exportHtml(container, title, toc);
       else if (format === 'pdf') exportPdf();
       else if (format === 'word') await exportWord(container, title);
     });

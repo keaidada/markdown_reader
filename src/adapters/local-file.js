@@ -111,7 +111,7 @@ export class LocalFileAdapter extends BaseAdapter {
     // Add export button to header
     const header = wrapper.querySelector('.md-reader-local-header');
     const contentContainer = wrapper.querySelector('.md-reader-container');
-    const exportBtn = createExportButton(contentContainer, filename.replace(/\.[^.]+$/, ''));
+    const exportBtn = createExportButton(contentContainer, filename.replace(/\.[^.]+$/, ''), toc);
     header.appendChild(exportBtn);
 
     return { container: contentContainer, toc };
